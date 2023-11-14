@@ -4,51 +4,63 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain"
+	"time"
 )
 
 type TransactionalOutbox struct {
-	producer                   domain.Producer
-	transactionalOutboxFinder  domain.TransactionalOutboxFinder
-	transactionalOutboxUpdater domain.TransactionalOutboxUpdater
+	producer                      domain.Producer
+	transactionalOutboxRepository domain.TransactionalOutboxRepository
 }
 
 func NewTransactionalOutbox(
 	producer domain.Producer,
-	transactionalOutboxFinder domain.TransactionalOutboxFinder,
-	transactionalOutboxUpdater domain.TransactionalOutboxUpdater,
+	transactionalOutboxRepository domain.TransactionalOutboxRepository,
 ) TransactionalOutbox {
 	return TransactionalOutbox{
-		producer:                   producer,
-		transactionalOutboxFinder:  transactionalOutboxFinder,
-		transactionalOutboxUpdater: transactionalOutboxUpdater,
+		producer:                      producer,
+		transactionalOutboxRepository: transactionalOutboxRepository,
 	}
 }
 
 func (top TransactionalOutbox) Process(ctx context.Context) error {
-	transactionOutbox, err := top.transactionalOutboxFinder.FindByUnsent(ctx)
+	transactionalOutbox, err := top.transactionalOutboxRepository.FindByUnsent(ctx)
 	if err != nil {
 		return err
 	}
 
-	if transactionOutbox.ID.NotExist() {
+	if transactionalOutbox.ID.NotExist() {
 		return nil
 	}
 
-	var transaction domain.Transaction
-	err = json.Unmarshal(transactionOutbox.Body, &transaction)
+	event, err := top.buildEvent(transactionalOutbox)
 	if err != nil {
 		return err
 	}
 
-	err = top.producer.Publish(ctx, domain.Event{})
+	err = top.producer.Publish(ctx, event)
 	if err != nil {
 		return err
 	}
 
-	err = top.transactionalOutboxUpdater.MarkToSent(ctx, transactionOutbox.ID)
+	err = top.transactionalOutboxRepository.MarkToSent(ctx, transactionalOutbox.ID)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (top TransactionalOutbox) buildEvent(transactionalOutbox domain.TransactionalOutbox) (domain.Event, error) {
+	var transaction domain.Transaction
+	err := json.Unmarshal(transactionalOutbox.Body, &transaction)
+	if err != nil {
+		return domain.Event{}, err
+	}
+
+	return domain.NewEvent(
+		transactionalOutbox.Domain,
+		transactionalOutbox.Type,
+		string(transactionalOutbox.Body),
+		time.Now().UTC(),
+	), nil
 }

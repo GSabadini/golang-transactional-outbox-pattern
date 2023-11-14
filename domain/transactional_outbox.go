@@ -7,33 +7,51 @@ import (
 	"time"
 )
 
-type (
-	TransactionalOutboxCreator interface {
-		Create(context.Context, *sql.Tx, TransactionalOutbox) error
-	}
-
-	TransactionalOutboxFinder interface {
-		FindByUnsent(context.Context) (TransactionalOutbox, error)
-	}
-
-	TransactionalOutboxUpdater interface {
-		MarkToSent(context.Context, valueobject.ID) error
-	}
-)
+type TransactionalOutboxRepository interface {
+	Create(context.Context, *sql.Tx, TransactionalOutbox) error
+	FindByUnsent(context.Context) (TransactionalOutbox, error)
+	MarkToSent(context.Context, valueobject.ID) error
+}
 
 type TransactionalOutbox struct {
 	ID        valueobject.ID
-	Target    string
-	EventType string
+	Domain    string
+	Type      string
 	Body      []byte
 	Sent      bool
+	SentAt    time.Time
 	CreatedAt time.Time
 }
 
-func NewTransactionalOutbox(body []byte, sent bool, createdAt time.Time) TransactionalOutbox {
-	return TransactionalOutbox{
-		Body:      body,
-		Sent:      sent,
-		CreatedAt: createdAt,
+type TransactionalOutboxOption func(*TransactionalOutbox)
+
+func NewTransactionalOutbox(
+	domain string,
+	eventType string,
+	body []byte,
+	opts ...TransactionalOutboxOption,
+) TransactionalOutbox {
+	var to = TransactionalOutbox{
+		Domain: domain,
+		Type:   eventType,
+		Body:   body,
+	}
+
+	for _, o := range opts {
+		o(&to)
+	}
+
+	return to
+}
+
+func WithID(id int64) TransactionalOutboxOption {
+	return func(to *TransactionalOutbox) {
+		to.ID = valueobject.ID(id)
+	}
+}
+
+func WithCreatedAt(createdAt time.Time) TransactionalOutboxOption {
+	return func(to *TransactionalOutbox) {
+		to.CreatedAt = createdAt
 	}
 }

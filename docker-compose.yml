@@ -12,3 +12,16 @@ services:
       MYSQL_DATABASE: dev
     volumes:
       - ./_scripts/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:rw
+
+  localstack:
+    container_name: localstack-dev
+    image: localstack/localstack
+    environment:
+      - SERVICES=sns
+      - DEBUG=1
+      - HOSTNAME_EXTERNAL=localstack
+      - DEFAULT_REGION=sa-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./_scripts/aws/localstack.sh:/docker-entrypoint-initaws.d/localstack.sh

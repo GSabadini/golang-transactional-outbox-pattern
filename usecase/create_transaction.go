@@ -2,10 +2,10 @@ package usecase
 
 import (
 	"context"
-	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 	"time"
 
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain"
+	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 
 	"github.com/shopspring/decimal"
 )
@@ -16,9 +16,9 @@ type CreateTransactionUseCase interface {
 
 type CreateTransactionInput struct {
 	AccountID     valueobject.ID            `json:"account_id"`
-	Amount        decimal.Decimal           `json:"amount"`
-	Currency      string                    `json:"currency"`
+	Currency      valueobject.Currency      `json:"currency"`
 	OperationType valueobject.OperationType `json:"operation_type"`
+	Amount        decimal.Decimal           `json:"amount"`
 }
 
 type CreateTransactionOutput struct {
@@ -26,20 +26,20 @@ type CreateTransactionOutput struct {
 }
 
 type CreateTransactionOrchestrate struct {
-	atomic                     domain.Atomic
-	transactionCreator         domain.TransactionCreator
-	transactionalOutboxCreator domain.TransactionalOutboxCreator
+	atomic                        domain.Atomic
+	transactionRepository         domain.TransactionRepository
+	transactionalOutboxRepository domain.TransactionalOutboxRepository
 }
 
 func NewCreateTransactionOrchestrate(
 	atomic domain.Atomic,
-	transactionCreator domain.TransactionCreator,
-	transactionalOutboxCreator domain.TransactionalOutboxCreator,
+	transactionRepository domain.TransactionRepository,
+	transactionalOutboxRepository domain.TransactionalOutboxRepository,
 ) CreateTransactionOrchestrate {
 	return CreateTransactionOrchestrate{
-		atomic:                     atomic,
-		transactionCreator:         transactionCreator,
-		transactionalOutboxCreator: transactionalOutboxCreator,
+		atomic:                        atomic,
+		transactionRepository:         transactionRepository,
+		transactionalOutboxRepository: transactionalOutboxRepository,
 	}
 }
 
@@ -47,15 +47,13 @@ func (cto CreateTransactionOrchestrate) Execute(
 	ctx context.Context,
 	input CreateTransactionInput,
 ) (CreateTransactionOutput, error) {
-	transaction := domain.NewTransaction(
+	transactionID, err := cto.performTransactionalOperation(ctx, domain.NewTransaction(
 		input.AccountID,
 		input.Amount,
 		input.Currency,
 		input.OperationType,
 		time.Now().UTC(),
-	)
-
-	transactionID, err := cto.performTransactionalOperation(ctx, transaction)
+	))
 	if err != nil {
 		return CreateTransactionOutput{}, err
 	}
@@ -74,21 +72,26 @@ func (cto CreateTransactionOrchestrate) performTransactionalOperation(
 
 	defer cto.atomic.Rollback(tx)
 
-	id, err := cto.transactionCreator.Create(ctx, tx, transaction)
+	id, err := cto.transactionRepository.Create(ctx, tx, transaction)
 	if err != nil {
 		return valueobject.ID(0), err
 	}
 	transaction.WithID(id)
 
-	transactionJSON, err := transaction.ToJSON()
+	eventBody, err := transaction.ToJSON()
 	if err != nil {
 		return valueobject.ID(0), err
 	}
 
-	err = cto.transactionalOutboxCreator.Create(
+	err = cto.transactionalOutboxRepository.Create(
 		ctx,
 		tx,
-		domain.NewTransactionalOutbox(transactionJSON, false, time.Now().UTC()),
+		domain.NewTransactionalOutbox(
+			domain.TransactionEventDomain,
+			domain.TransactionEventType,
+			eventBody,
+			domain.WithCreatedAt(time.Now().UTC()),
+		),
 	)
 	if err != nil {
 		return valueobject.ID(0), err

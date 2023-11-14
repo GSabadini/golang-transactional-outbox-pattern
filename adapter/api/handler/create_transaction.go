@@ -29,8 +29,13 @@ func (cth CreateTransactionHandler) Handle(c echo.Context) error {
 	}
 
 	if !input.OperationType.IsValid() {
-		logger.Slog.Error("Operation type invalid", slog.String("error", err.Error()))
-		return c.JSON(http.StatusBadRequest, apierror.ErrInvalidPayload)
+		logger.Slog.Error("Invalid operation type")
+		return c.JSON(http.StatusBadRequest, apierror.ErrInvalidOperationType)
+	}
+
+	if !input.Currency.IsValid() {
+		logger.Slog.Error("Invalid currency")
+		return c.JSON(http.StatusBadRequest, apierror.ErrInvalidCurrency)
 	}
 
 	output, err := cth.usecase.Execute(c.Request().Context(), input)

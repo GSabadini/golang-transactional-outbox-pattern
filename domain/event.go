@@ -1,17 +1,21 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Producer interface {
 	Publish(context.Context, Event) error
 }
 
 type Event struct {
-	Type      string
-	Body      string
-	Timestamp string
+	Domain    string    `json:"domain"`
+	Type      string    `json:"type"`
+	Body      string    `json:"body"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewEvent(Type string, body string, timestamp string) Event {
-	return Event{Type: Type, Body: body, Timestamp: timestamp}
+func NewEvent(domain string, eventType string, body string, timestamp time.Time) Event {
+	return Event{Domain: domain, Type: eventType, Body: body, Timestamp: timestamp}
 }

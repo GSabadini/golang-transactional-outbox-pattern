@@ -4,31 +4,35 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 	"time"
+
+	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 
 	"github.com/shopspring/decimal"
 )
 
-type (
-	TransactionCreator interface {
-		Create(context.Context, *sql.Tx, Transaction) (valueobject.ID, error)
-	}
+const (
+	TransactionEventDomain = "transactions"
+	TransactionEventType   = "transaction-created"
 )
+
+type TransactionRepository interface {
+	Create(context.Context, *sql.Tx, Transaction) (valueobject.ID, error)
+}
 
 type Transaction struct {
 	ID            valueobject.ID            `json:"id"`
 	AccountID     valueobject.ID            `json:"account_id"`
-	Amount        decimal.Decimal           `json:"amount"`
-	Currency      string                    `json:"currency"`
+	Currency      valueobject.Currency      `json:"currency"`
 	OperationType valueobject.OperationType `json:"operation_type"`
+	Amount        decimal.Decimal           `json:"amount"`
 	CreatedAt     time.Time                 `json:"created_at"`
 }
 
 func NewTransaction(
 	accountID valueobject.ID,
 	amount decimal.Decimal,
-	currency string,
+	currency valueobject.Currency,
 	operationType valueobject.OperationType,
 	createdAt time.Time,
 ) Transaction {
