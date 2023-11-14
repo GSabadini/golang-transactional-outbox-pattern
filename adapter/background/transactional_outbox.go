@@ -2,7 +2,6 @@ package background
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain"
 	"time"
 )
@@ -32,10 +31,12 @@ func (top TransactionalOutbox) Process(ctx context.Context) error {
 		return nil
 	}
 
-	event, err := top.buildEvent(transactionalOutbox)
-	if err != nil {
-		return err
-	}
+	event := domain.NewEvent(
+		transactionalOutbox.Domain,
+		transactionalOutbox.Type,
+		string(transactionalOutbox.Body),
+		time.Now().UTC(),
+	)
 
 	err = top.producer.Publish(ctx, event)
 	if err != nil {
@@ -48,19 +49,4 @@ func (top TransactionalOutbox) Process(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (top TransactionalOutbox) buildEvent(transactionalOutbox domain.TransactionalOutbox) (domain.Event, error) {
-	var transaction domain.Transaction
-	err := json.Unmarshal(transactionalOutbox.Body, &transaction)
-	if err != nil {
-		return domain.Event{}, err
-	}
-
-	return domain.NewEvent(
-		transactionalOutbox.Domain,
-		transactionalOutbox.Type,
-		string(transactionalOutbox.Body),
-		time.Now().UTC(),
-	), nil
 }
