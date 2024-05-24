@@ -5,9 +5,11 @@ import (
 	"database/sql"
 )
 
-type Atomic struct {
-	db *sql.DB
-}
+type (
+	Atomic struct {
+		db *sql.DB
+	}
+)
 
 func NewAtomic(db *sql.DB) Atomic {
 	return Atomic{db: db}

@@ -10,6 +10,7 @@ import (
 	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/broker"
 	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/database"
 	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/logger"
+	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/opentelemetry"
 
 	"github.com/shopspring/decimal"
 )
@@ -19,15 +20,29 @@ func main() {
 
 	decimal.MarshalJSONWithoutQuotes = false
 
-	mysql, err := database.NewMySQL()
+	tracerShutdown, err := opentelemetry.NewTracer(ctx)
+	if err != nil {
+		logger.Slog.Error("Tracer connection error", slog.String("error", err.Error()))
+		os.Exit(0)
+	}
+	defer tracerShutdown()
+
+	mysql, mysqlShutdown, err := database.NewMySQL(ctx)
 	if err != nil {
 		logger.Slog.Error("Database connection error", slog.String("error", err.Error()))
 		os.Exit(0)
 	}
+	defer mysqlShutdown()
+
+	awsConfig, err := aws.NewConfig(ctx)
+	if err != nil {
+		logger.Slog.Error("AWS connection error", slog.String("error", err.Error()))
+		os.Exit(0)
+	}
 
 	var dependencies = infra.Dependencies{
-		Broker: broker.NewSNS(aws.NewConfig()),
-		MySQL:  mysql,
+		SNS:   broker.NewSNS(awsConfig),
+		MySQL: mysql,
 	}
 
 	infra.NewHTTPServer().Start(ctx, dependencies)

@@ -4,48 +4,57 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain"
+	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
+	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/opentelemetry"
 )
 
 const (
-	queryInsertTransactionalOutbox       = `INSERT INTO TransactionalOutbox (Domain, Type, Body, Sent, SentAt, CreatedAt) VALUES (?, ?, ?, ?, ?, ?);`
-	queryFindByUnsentTransactionalOutbox = `SELECT ID, Domain, Type, Body FROM TransactionalOutbox WHERE Sent=0 LIMIT 1 FOR UPDATE SKIP LOCKED;`
-	queryMarkToSentTransactionalOutbox   = `UPDATE TransactionalOutbox SET Sent=(?), SentAt=(?) WHERE ID=(?);`
+	queryInsertTransactionalOutbox          = `INSERT INTO TransactionalOutbox (Domain, Type, Body, Sent, SentAt, CreatedAt) VALUES (?, ?, ?, ?, ?, ?);`
+	queryListByUnsentTransactionalOutbox    = `SELECT ID, Domain, Type, Body FROM TransactionalOutbox WHERE Sent=0 LIMIT 10 FOR UPDATE SKIP LOCKED;`
+	queryMarkToSentTransactionalOutbox      = `UPDATE TransactionalOutbox SET Sent=(?), SentAt=(?) WHERE ID=(?);`
+	queryMarkToSentTransactionalOutboxBatch = `UPDATE TransactionalOutbox SET Sent=(?), SentAt=(?) WHERE ID IN (%s);`
 )
 
-type TransactionalOutboxModel struct {
-	ID        sql.NullInt64
-	Domain    sql.NullString
-	Type      sql.NullString
-	Body      []byte
-	Sent      sql.NullBool
-	SentAt    sql.NullTime
-	CreatedAt sql.NullTime
-}
+type (
+	TransactionalOutboxModel struct {
+		ID        sql.NullInt64
+		Domain    sql.NullString
+		Type      sql.NullString
+		Body      []byte
+		Sent      sql.NullBool
+		SentAt    sql.NullTime
+		CreatedAt sql.NullTime
+	}
 
-type TransactionalOutboxRepository struct {
-	db *sql.DB
-}
+	TransactionalOutboxRepository struct {
+		db *sql.DB
+	}
+)
 
 func NewTransactionalOutboxRepository(db *sql.DB) TransactionalOutboxRepository {
 	return TransactionalOutboxRepository{db: db}
 }
 
-func (tor TransactionalOutboxRepository) Create(
+func (t TransactionalOutboxRepository) Create(
 	ctx context.Context,
 	tx *sql.Tx,
 	transactionalOutbox domain.TransactionalOutbox,
 ) error {
+	ctx, span := opentelemetry.NewSpan(ctx, "repository.transactional_outbox.create")
+	defer span.End()
+
 	var model = TransactionalOutboxModel{
-		Domain:    NewNullString(transactionalOutbox.Domain),
-		Type:      NewNullString(transactionalOutbox.Type),
+		Domain:    newNullString(transactionalOutbox.Domain),
+		Type:      newNullString(transactionalOutbox.Type),
 		Body:      transactionalOutbox.Body,
-		Sent:      NewNullBool(transactionalOutbox.Sent),
-		SentAt:    NewNullTime(transactionalOutbox.SentAt),
-		CreatedAt: NewNullTime(transactionalOutbox.CreatedAt),
+		Sent:      newNullBool(transactionalOutbox.Sent),
+		SentAt:    newNullTime(transactionalOutbox.SentAt),
+		CreatedAt: newNullTime(transactionalOutbox.CreatedAt),
 	}
 
 	_, err := tx.ExecContext(
@@ -59,41 +68,64 @@ func (tor TransactionalOutboxRepository) Create(
 		model.CreatedAt,
 	)
 	if err != nil {
+		opentelemetry.SetError(span, err)
 		return err
 	}
 
 	return nil
 }
 
-func (tor TransactionalOutboxRepository) FindByUnsent(ctx context.Context) (domain.TransactionalOutbox, error) {
-	var model TransactionalOutboxModel
+func (t TransactionalOutboxRepository) ListByUnsent(ctx context.Context) ([]domain.TransactionalOutbox, error) {
+	ctx, span := opentelemetry.NewSpan(ctx, "repository.transactional_outbox.list_by_unsent")
+	defer span.End()
 
-	err := tor.db.QueryRowContext(ctx, queryFindByUnsentTransactionalOutbox).Scan(
-		&model.ID,
-		&model.Domain,
-		&model.Type,
-		&model.Body,
+	var (
+		model                 TransactionalOutboxModel
+		transactionOutboxList []domain.TransactionalOutbox
 	)
+
+	rows, err := t.db.QueryContext(ctx, queryListByUnsentTransactionalOutbox)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.TransactionalOutbox{}, nil
+			return []domain.TransactionalOutbox{}, nil
 		}
 
-		return domain.TransactionalOutbox{}, err
+		opentelemetry.SetError(span, err)
+		return []domain.TransactionalOutbox{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&model.ID, &model.Domain, &model.Type, &model.Body)
+		if err != nil {
+			return []domain.TransactionalOutbox{}, err
+		}
+
+		transactionOutboxList = append(transactionOutboxList, domain.NewTransactionalOutbox(
+			model.Domain.String,
+			model.Type.String,
+			model.Body,
+			domain.WithID(model.ID.Int64),
+		))
 	}
 
-	var transactionalOutbox = domain.NewTransactionalOutbox(
-		model.Domain.String,
-		model.Type.String,
-		model.Body,
-		domain.WithID(model.ID.Int64),
-	)
+	err = rows.Close()
+	if err != nil {
+		return []domain.TransactionalOutbox{}, err
+	}
 
-	return transactionalOutbox, nil
+	if err = rows.Err(); err != nil {
+		return []domain.TransactionalOutbox{}, err
+	}
+
+	return transactionOutboxList, nil
 }
 
-func (tor TransactionalOutboxRepository) MarkToSent(ctx context.Context, id valueobject.ID) error {
-	_, err := tor.db.ExecContext(
+func (t TransactionalOutboxRepository) MarkToSent(ctx context.Context, id valueobject.ID) error {
+	ctx, span := opentelemetry.NewSpan(ctx, "repository.transactional_outbox.mark_to_sent")
+	defer span.End()
+
+	_, err := t.db.ExecContext(
 		ctx,
 		queryMarkToSentTransactionalOutbox,
 		true,
@@ -101,6 +133,31 @@ func (tor TransactionalOutboxRepository) MarkToSent(ctx context.Context, id valu
 		id,
 	)
 	if err != nil {
+		opentelemetry.SetError(span, err)
+		return err
+	}
+
+	return nil
+}
+
+func (t TransactionalOutboxRepository) MarkToSentBatch(ctx context.Context, idList []valueobject.ID) error {
+	ctx, span := opentelemetry.NewSpan(ctx, "repository.transactional_outbox.mark_to_sent_batch")
+	defer span.End()
+
+	var idListStr []string
+
+	for _, id := range idList {
+		idListStr = append(idListStr, id.String())
+	}
+
+	_, err := t.db.ExecContext(
+		ctx,
+		fmt.Sprintf(queryMarkToSentTransactionalOutboxBatch, strings.Join(idListStr, ",")),
+		true,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		opentelemetry.SetError(span, err)
 		return err
 	}
 

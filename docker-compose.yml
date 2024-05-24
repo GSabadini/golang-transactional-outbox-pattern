@@ -15,13 +15,50 @@ services:
 
   localstack:
     container_name: localstack-dev
-    image: localstack/localstack
+    image: localstack/localstack:stable
     environment:
-      - SERVICES=sns
       - DEBUG=1
-      - HOSTNAME_EXTERNAL=localstack
-      - DEFAULT_REGION=sa-east-1
+      - LOCALSTACK_HOST=localhost
+      - SQS_ENDPOINT_STRATEGY=off
+      - AWS_DEFAULT_REGION=sa-east-1
     ports:
       - "4566:4566"
     volumes:
-      - ./_scripts/aws/localstack.sh:/docker-entrypoint-initaws.d/localstack.sh
+      - ./_scripts/aws/localstack.sh:/etc/localstack/init/ready.d/init-aws.sh
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dev-tmp:/var/lib/localstack
+    healthcheck:
+      test: curl -f "http://localhost:4566/health"
+
+  zipkin:
+    container_name: zipkin-dev
+    image: openzipkin/zipkin:latest
+    environment:
+      - JAVA_OPTS=-Xms1024m -Xmx1024m -XX:+ExitOnOutOfMemoryError
+    ports:
+      - "9411:9411"
+
+  collector:
+    container_name: collector-dev
+    image: otel/opentelemetry-collector:latest
+    command: [ "--config=/conf/collector-config.yaml" ]
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+    volumes:
+      - ./_scripts/opentelemetry/collector-config.yaml:/conf/collector-config.yaml
+    ports:
+      - "1888:1888"   # pprof extension
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "55679:55679" # zpages extension
+    depends_on:
+      - zipkin
+    healthcheck:
+      test: curl -f "http://localhost:13133"
+
+volumes:
+  dev-tmp:

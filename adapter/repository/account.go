@@ -6,33 +6,39 @@ import (
 
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain"
 	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
+	"github.com/GSabadini/golang-transactional-outbox-pattern/infra/opentelemetry"
 )
 
 const (
 	queryInsertAccount = `INSERT INTO Accounts (Document, CreatedAt) VALUES (?, ?);`
 )
 
-type AccountModel struct {
-	Document  sql.NullString
-	CreatedAt sql.NullTime
-}
+type (
+	AccountModel struct {
+		Document  sql.NullString
+		CreatedAt sql.NullTime
+	}
 
-type AccountRepository struct {
-	db *sql.DB
-}
+	AccountRepository struct {
+		db *sql.DB
+	}
+)
 
 func NewAccountRepository(db *sql.DB) AccountRepository {
 	return AccountRepository{db: db}
 }
 
-func (ar AccountRepository) Create(
+func (a AccountRepository) Create(
 	ctx context.Context,
 	tx *sql.Tx,
 	account domain.Account,
 ) (valueobject.ID, error) {
+	ctx, span := opentelemetry.NewSpan(ctx, "repository.account.create")
+	defer span.End()
+
 	var model = AccountModel{
-		Document:  NewNullString(account.Document.String()),
-		CreatedAt: NewNullTime(account.CreatedAt),
+		Document:  newNullString(account.Document.String()),
+		CreatedAt: newNullTime(account.CreatedAt),
 	}
 
 	result, err := tx.ExecContext(
@@ -42,11 +48,13 @@ func (ar AccountRepository) Create(
 		model.CreatedAt,
 	)
 	if err != nil {
+		opentelemetry.SetError(span, err)
 		return valueobject.ID(0), err
 	}
 
 	accountID, err := result.LastInsertId()
 	if err != nil {
+		opentelemetry.SetError(span, err)
 		return valueobject.ID(0), err
 	}
 

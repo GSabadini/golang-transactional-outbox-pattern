@@ -25,3 +25,6 @@ CREATE TABLE TransactionalOutbox
     SentAt      datetime    null,
     CreatedAt   datetime    null
 );
+
+CREATE INDEX DomainIdx
+    on TransactionalOutbox (Domain);

@@ -14,15 +14,17 @@ const (
 	AccountEventType   = "account-created"
 )
 
-type AccountRepository interface {
-	Create(context.Context, *sql.Tx, Account) (valueobject.ID, error)
-}
+type (
+	AccountRepository interface {
+		Create(context.Context, *sql.Tx, Account) (valueobject.ID, error)
+	}
 
-type Account struct {
-	ID        valueobject.ID       `json:"id"`
-	Document  valueobject.Document `json:"document"`
-	CreatedAt time.Time            `json:"created_at"`
-}
+	Account struct {
+		ID        valueobject.ID       `json:"id"`
+		Document  valueobject.Document `json:"document"`
+		CreatedAt time.Time            `json:"created_at"`
+	}
+)
 
 func NewAccount(document valueobject.Document, createdAt time.Time) Account {
 	return Account{
@@ -35,6 +37,6 @@ func (a *Account) WithID(id valueobject.ID) {
 	a.ID = id
 }
 
-func (a *Account) ToJSON() ([]byte, error) {
+func (a *Account) EventBody() ([]byte, error) {
 	return json.Marshal(a)
 }

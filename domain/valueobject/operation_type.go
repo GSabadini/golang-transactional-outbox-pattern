@@ -1,15 +1,15 @@
 package valueobject
 
+const (
+	Credit OperationType = "CREDIT"
+	Debit  OperationType = "DEBIT"
+)
+
 type OperationType string
 
 func (o OperationType) String() string {
 	return string(o)
 }
-
-const (
-	Credit OperationType = "CREDIT"
-	Debit  OperationType = "DEBIT"
-)
 
 func (o OperationType) IsValid() bool {
 	switch o {

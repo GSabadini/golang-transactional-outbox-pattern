@@ -2,10 +2,10 @@ package infra
 
 import (
 	"database/sql"
-	"github.com/GSabadini/golang-transactional-outbox-pattern/adapter/producer"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
 )
 
 type Dependencies struct {
-	Broker producer.Broker
-	MySQL  *sql.DB
+	SNS   *sns.Client
+	MySQL *sql.DB
 }

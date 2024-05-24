@@ -16,18 +16,20 @@ const (
 	TransactionEventType   = "transaction-created"
 )
 
-type TransactionRepository interface {
-	Create(context.Context, *sql.Tx, Transaction) (valueobject.ID, error)
-}
+type (
+	TransactionRepository interface {
+		Create(context.Context, *sql.Tx, Transaction) (valueobject.ID, error)
+	}
 
-type Transaction struct {
-	ID            valueobject.ID            `json:"id"`
-	AccountID     valueobject.ID            `json:"account_id"`
-	Currency      valueobject.Currency      `json:"currency"`
-	OperationType valueobject.OperationType `json:"operation_type"`
-	Amount        decimal.Decimal           `json:"amount"`
-	CreatedAt     time.Time                 `json:"created_at"`
-}
+	Transaction struct {
+		ID            valueobject.ID            `json:"id"`
+		AccountID     valueobject.ID            `json:"account_id"`
+		Currency      valueobject.Currency      `json:"currency"`
+		OperationType valueobject.OperationType `json:"operation_type"`
+		Amount        decimal.Decimal           `json:"amount"`
+		CreatedAt     time.Time                 `json:"created_at"`
+	}
+)
 
 func NewTransaction(
 	accountID valueobject.ID,
@@ -49,6 +51,6 @@ func (t *Transaction) WithID(id valueobject.ID) {
 	t.ID = id
 }
 
-func (t *Transaction) ToJSON() ([]byte, error) {
+func (t *Transaction) EventBody() ([]byte, error) {
 	return json.Marshal(t)
 }

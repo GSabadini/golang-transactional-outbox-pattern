@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func NewNullInt64(i int64) sql.NullInt64 {
+func newNullInt64(i int64) sql.NullInt64 {
 	if i == 0 {
 		return sql.NullInt64{}
 	}
@@ -16,7 +16,7 @@ func NewNullInt64(i int64) sql.NullInt64 {
 	}
 }
 
-func NewNullFloat64(i float64) sql.NullFloat64 {
+func newNullFloat64(i float64) sql.NullFloat64 {
 	if i == 0 {
 		return sql.NullFloat64{}
 	}
@@ -27,7 +27,7 @@ func NewNullFloat64(i float64) sql.NullFloat64 {
 	}
 }
 
-func NewNullTime(t time.Time) sql.NullTime {
+func newNullTime(t time.Time) sql.NullTime {
 	if t.IsZero() {
 		return sql.NullTime{}
 	}
@@ -38,7 +38,7 @@ func NewNullTime(t time.Time) sql.NullTime {
 	}
 }
 
-func NewNullString(s string) sql.NullString {
+func newNullString(s string) sql.NullString {
 	if len(s) == 0 {
 		return sql.NullString{}
 	}
@@ -49,7 +49,7 @@ func NewNullString(s string) sql.NullString {
 	}
 }
 
-func NewNullBool(b bool) sql.NullBool {
+func newNullBool(b bool) sql.NullBool {
 	return sql.NullBool{
 		Bool:  b,
 		Valid: true,

@@ -3,27 +3,31 @@ package domain
 import (
 	"context"
 	"database/sql"
-	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 	"time"
+
+	"github.com/GSabadini/golang-transactional-outbox-pattern/domain/valueobject"
 )
 
-type TransactionalOutboxRepository interface {
-	Create(context.Context, *sql.Tx, TransactionalOutbox) error
-	FindByUnsent(context.Context) (TransactionalOutbox, error)
-	MarkToSent(context.Context, valueobject.ID) error
-}
+type (
+	TransactionalOutboxRepository interface {
+		Create(context.Context, *sql.Tx, TransactionalOutbox) error
+		ListByUnsent(context.Context) ([]TransactionalOutbox, error)
+		MarkToSent(context.Context, valueobject.ID) error
+		MarkToSentBatch(context.Context, []valueobject.ID) error
+	}
 
-type TransactionalOutbox struct {
-	ID        valueobject.ID
-	Domain    string
-	Type      string
-	Body      []byte
-	Sent      bool
-	SentAt    time.Time
-	CreatedAt time.Time
-}
+	TransactionalOutbox struct {
+		ID        valueobject.ID
+		Domain    string
+		Type      string
+		Body      []byte
+		Sent      bool
+		SentAt    time.Time
+		CreatedAt time.Time
+	}
 
-type TransactionalOutboxOption func(*TransactionalOutbox)
+	TransactionalOutboxOption func(*TransactionalOutbox)
+)
 
 func NewTransactionalOutbox(
 	domain string,
